@@ -92,4 +92,81 @@ class ChirpTest extends TestCase
             'id' => $chirp->id,
         ]);
     }
+
+    public function test_nombre_maximum_de_chirps()
+    {
+        $utilisateur = User::factory()->create();
+        Chirp::factory()->count(10)->create(['user_id' => $utilisateur->id]);
+        $this->actingAs($utilisateur);
+
+        $reponse = $this->post('/chirps', [
+            'content' => 'Chirp supplémentaire'
+        ]);
+
+        $reponse->assertStatus(403);
+    }
+
+    public function test_affichage_des_chirps_recents()
+    {
+        Chirp::factory()->create(['created_at' => now()->subDays(8)]);
+        $chirpRecent = Chirp::factory()->create(['created_at' => now()]);
+        $reponse = $this->get('/');
+
+        $reponse->assertSee($chirpRecent->content);
+        $reponse->assertDontSee('Chirp trop ancien');
+    }
+
+    public function test_un_utilisateur_ne_peut_pas_modifier_le_chirp_d_un_autre()
+    {
+        $utilisateur1 = User::factory()->create();
+        $utilisateur2 = User::factory()->create();
+        $chirp = Chirp::factory()->create(['user_id' => $utilisateur1->id]);
+
+        $this->actingAs($utilisateur2);
+
+        $reponse = $this->put("/chirps/{$chirp->id}", [
+            'content' => 'Modification non autorisée'
+        ]);
+
+        $reponse->assertStatus(403);
+    }
+
+    public function test_un_utilisateur_ne_peut_pas_supprimer_le_chirp_d_un_autre()
+    {
+        $utilisateur1 = User::factory()->create();
+        $utilisateur2 = User::factory()->create();
+        $chirp = Chirp::factory()->create(['user_id' => $utilisateur1->id]);
+
+        $this->actingAs($utilisateur2);
+
+        $reponse = $this->delete("/chirps/{$chirp->id}");
+
+        $reponse->assertStatus(403);
+    }
+
+    public function test_utilisateur_peut_liker_un_chirp()
+    {
+        $utilisateur = User::factory()->create();
+        $chirp = Chirp::factory()->create();
+        $this->actingAs($utilisateur);
+
+        $reponse = $this->post("/chirps/{$chirp->id}/like");
+        $reponse->assertStatus(201);
+
+        $this->assertDatabaseHas('likes', [
+            'chirp_id' => $chirp->id,
+            'user_id' => $utilisateur->id,
+        ]);
+    }
+
+    public function test_utilisateur_ne_peut_pas_liker_deux_fois()
+    {
+        $utilisateur = User::factory()->create();
+        $chirp = Chirp::factory()->create();
+        $this->actingAs($utilisateur);
+
+        $this->post("/chirps/{$chirp->id}/like");
+        $reponse = $this->post("/chirps/{$chirp->id}/like");
+        $reponse->assertStatus(403);
+    }
 }
